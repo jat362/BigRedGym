@@ -72,6 +72,13 @@ def get_play_args(argv=None):
         "gym/utils/interfaces/MujocoKeyboardInterface.py for key bindings). "
         "Use --no-keyboard to disable.",
     )
+    parser.add_argument(
+        "--stand_test",
+        action="store_true",
+        default=False,
+        help="Debug: fixed standing commands, zero residual actions, "
+        "no pushes, gentle zero-velocity spawn.",
+    )
     return parser.parse_args(argv)
 
 
@@ -92,10 +99,12 @@ def setup(args):
     if hasattr(env_cfg, "commands"):
         env_cfg.commands.resampling_time = 9999
     if hasattr(env_cfg, "push_robots"):
-        env_cfg.push_robots.toggle = False
+        env_cfg.push_robots.toggle = not args.stand_test
     env_cfg.init_state.reset_mode = "reset_to_basic"
-    env_cfg.init_state.root_pos_range[2] = [0.34, 0.34]       # z
-    env_cfg.init_state.root_vel_range = [[0.0, 0.0]] * 6
+
+    if args.stand_test:
+        env_cfg.init_state.root_pos_range[2] = [0.34, 0.34]
+        env_cfg.init_state.root_vel_range = [[0.0, 0.0]] * 6
 
 
     if hasattr(env_cfg, "viewer"):
@@ -136,85 +145,69 @@ def setup(args):
 
 
 
-def play(env, runner):
+def play(env, runner, stand_test=False):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
     def set_standing_commands():
-        env.commands[:, 0] = 0.0
-        env.commands[:, 1] = 0.0
-        env.commands[:, 2] = 0.0
+        env.commands[:, :3] = 0.0
         env.commands[:, 3] = 0.30
 
-    set_standing_commands()
-
-    n_steps = 10 * int(env.max_episode_length)
-    print("default_dof_pos:", env.default_dof_pos[0].cpu().numpy().round(3))
-
-
-    for i in range(n_steps):
-        # Keep standing commands fixed
+    if stand_test:
         set_standing_commands()
+        print("default_dof_pos:", env.default_dof_pos[0].cpu().numpy().round(3))
 
-        runner.set_actions(
-            runner.actor_cfg["actions"],
-            runner.get_inference_actions(),
-            runner.actor_cfg["disable_actions"],
-        )
+    t_log, target_log, actual_log = [], [], []
+    n_steps = 10 * int(env.max_episode_length)
 
-        # Temporarily disable learned residual actions
-        env.dof_pos_target.zero_()
+    try:
+        for i in range(n_steps):
+            if stand_test:
+                set_standing_commands()
 
-        env.step()
-        env.check_exit()
+            runner.set_actions(
+                runner.actor_cfg["actions"],
+                runner.get_inference_actions(),
+                runner.actor_cfg["disable_actions"],
+            )
+            if stand_test:
+                env.dof_pos_target.zero_()  # policy off, reference pose only
 
-        # Print diagnostics every 100 steps
-        if i % 100 == 0:
-            print(f"\nStep {i}")
-            print(
-                f"Target height: "
-                f"{env.commands[0, 3].item():.3f} m"
-            )
-            print(
-                f"Actual height: "
-                f"{env.base_height[0, 0].item():.3f} m"
-            )
-            print(
-                "Actual joints:",
-                env.dof_pos[0].detach().cpu().numpy().round(3)
-            )
-            print(
-                "Default joints:",
-                env.default_dof_pos[0].detach().cpu().numpy().round(3)
-            )
-            print(
-                "Residual actions:",
-                env.dof_pos_target[0].detach().cpu().numpy().round(3)
-            )
-            print(
-                "Applied torques:",
-                env.torques[0].detach().cpu().numpy().round(2)
-            )    
-            print(
-                "Base position:",
-                env.root_states[0, :3].detach().cpu().numpy().round(3)
-            )
-            print(
-                "Foot contact forces:",
-                env.contact_forces[0, env.feet_indices, :]
-                .detach().cpu().numpy().round(2)
-            )
-            print(
-                "Base quaternion:",
-                env.base_quat[0].detach().cpu().numpy().round(3)
-            )
+            env.step()
+            env.check_exit()
 
-            print(
-                "Projected gravity:",
-                env.projected_gravity[0].detach().cpu().numpy().round(3)
-            )
+            t_log.append(i * env.dt)
+            target_log.append(env.commands[0, 3].item())
+            actual_log.append(env.base_height[0, 0].item())
 
-            print(
-                "Base angular velocity:",
-                env.base_ang_vel[0].detach().cpu().numpy().round(3)
-            )
+            if stand_test and i % 100 == 0:
+                print(f"\nStep {i}")
+                print(f"Target height: {env.commands[0, 3].item():.3f} m")
+                print(f"Actual height: {env.base_height[0, 0].item():.3f} m")
+                print("Actual joints:", env.dof_pos[0].detach().cpu().numpy().round(3))
+                print("Applied torques:", env.torques[0].detach().cpu().numpy().round(2))
+                print(
+                    "Foot contact forces:",
+                    env.contact_forces[0, env.feet_indices, :]
+                    .detach().cpu().numpy().round(2),
+                )
+                print(
+                    "Projected gravity:",
+                    env.projected_gravity[0].detach().cpu().numpy().round(3),
+                )
+    finally:
+        # Runs even if check_exit() ends the loop when you close the window.
+        if t_log:
+            plt.figure(figsize=(8, 4))
+            plt.plot(t_log, target_log, label="commanded height")
+            plt.plot(t_log, actual_log, label="actual height")
+            plt.xlabel("time (s)")
+            plt.ylabel("base height (m)")
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig("height_tracking.pdf")
+            print("saved height_tracking.pdf")
 
 
 if __name__ == "__main__":
@@ -259,4 +252,4 @@ if __name__ == "__main__":
                 from gym.utils.interfaces.CommandVisualizer import CommandVisualizer
 
                 CommandVisualizer(env)
-        play(env, runner)
+        play(env, runner, args.stand_test)
