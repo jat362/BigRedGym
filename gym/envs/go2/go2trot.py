@@ -57,9 +57,16 @@ class Go2Trot(LeggedRobot):
 
     def _update_gait_reference(self):
         joint_phase = self.phase + self._gait_dof_phase_offsets.unsqueeze(0)
+
+        speed = torch.linalg.norm(self.commands[:, :3], dim=1, keepdim=True)
+
+        gait_scale = torch.clamp(speed / 0.3, min=0.0, max=1.0)
+
         self.gait_reference[:] = (
             self._gait_joint_offsets
-            + self._gait_joint_amplitudes * torch.sin(joint_phase)
+            + gait_scale
+            * self._gait_joint_amplitudes
+            * torch.sin(joint_phase)
         )
 
     def _leg_phases(self):
@@ -135,15 +142,15 @@ class Go2Trot(LeggedRobot):
             drop = command_mask.unsqueeze(1) & (
                 torch.rand(self.num_envs, 1, device=self.device) >= 0.8
             )
-            self.commands[:, 1:].masked_fill_(drop, 0.0)
+            self.commands[:, 1:3].masked_fill_(drop, 0.0)
             drop = command_mask.unsqueeze(1) & (
                 torch.rand(self.num_envs, 1, device=self.device) >= 0.8
             )
-            self.commands[:, :2].masked_fill_(drop, 0.0)
+            self.commands[:, :3].masked_fill_(drop, 0.0)
             drop = command_mask.unsqueeze(1) & (
                 torch.rand(self.num_envs, 1, device=self.device) >= 0.9
             )
-            self.commands.masked_fill_(drop, 0.0)
+            self.commands[:, :3].masked_fill_(drop, 0.0)
 
     def _reset_idx(self, reset_mask):
         super()._reset_idx(reset_mask)
@@ -182,24 +189,43 @@ class Go2Trot(LeggedRobot):
         return load.square() * (3.0 - 2.0 * load)
 
     def _reward_trot_support(self):
-        """Require both feet in the scheduled trot diagonal to support the body."""
+        """Reward diagonal stance support when the robot is commanded to move."""
         phase = torch.sin(self._leg_phases())
         contact_strength = self._foot_contact_strength()
+
         stance_strength = torch.where(
             phase > 0.0,
             contact_strength,
             torch.ones_like(contact_strength),
         )
+
         paired_support = torch.clamp(
             2.0 * torch.sqrt(torch.prod(stance_strength, dim=1)),
             max=1.0,
         )
-        return torch.relu(phase).amax(dim=1) * paired_support
+
+        reward = torch.relu(phase).amax(dim=1) * paired_support
+
+        # Match the gait scaling used in _update_gait_reference()
+        speed = torch.linalg.norm(self.commands[:, :3], dim=1)
+        gait_scale = torch.clamp(speed / 0.3, min=0.0, max=1.0)
+
+        return gait_scale * reward
+
 
     def _reward_swing_contact(self):
-        """Penalize load carried by feet during their scheduled swing phase."""
+        """Penalize swing-foot contact only when the robot is commanded to move."""
         phase = torch.sin(self._leg_phases())
-        return -torch.mean(torch.relu(-phase) * self._foot_contact_strength(), dim=1)
+
+        penalty = -torch.mean(
+            torch.relu(-phase) * self._foot_contact_strength(),
+            dim=1,
+        )
+
+        speed = torch.linalg.norm(self.commands[:, :3], dim=1)
+        gait_scale = torch.clamp(speed / 0.3, min=0.0, max=1.0)
+
+        return gait_scale * penalty
 
     def _reward_lin_vel_z(self):
         """Penalize z axis base linear velocity with squared exp"""
@@ -224,6 +250,17 @@ class Go2Trot(LeggedRobot):
         error /= self.scales["base_height"]
         error = torch.clamp(error, max=0, min=None).flatten()
         return self._sqrdexp(error)
+
+    def _reward_tracking_base_height(self):
+        """Reward tracking the commanded base height."""
+        target_height = self.commands[:, 3]
+        actual_height = self.base_height[:, 0]
+
+        error = (actual_height - target_height)
+
+        return torch.exp(
+        -torch.square(error / 0.1)
+    )
 
     def _reward_tracking_lin_vel(self):
         """Tracking of linear velocity commands (xy axes)"""

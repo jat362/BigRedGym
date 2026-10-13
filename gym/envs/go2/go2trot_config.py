@@ -6,15 +6,16 @@ class Go2TrotCfg(Go2Cfg):
         episode_length_s = 5
 
     class init_state(Go2Cfg.init_state):
+        pos = [0.0, 0.0, 0.30]
         # The gait reference supplies the nominal posture; residual targets
         # therefore use zero joint offsets here.
         default_joint_angles = {
             "hip_joint": 0.0,
-            "calf_joint": 0.0,
-            "FL_thigh_joint": 0.0,
-            "FR_thigh_joint": 0.0,
-            "RL_thigh_joint": 0.0,
-            "RR_thigh_joint": 0.0,
+            "calf_joint": -1.36,
+            "FL_thigh_joint": 0.96,
+            "FR_thigh_joint": 0.96,
+            "RL_thigh_joint": 0.96,
+            "RR_thigh_joint": 0.96,
         }
         reset_mode = "reset_to_basic"
 
@@ -36,11 +37,11 @@ class Go2TrotCfg(Go2Cfg):
         ]
 
     class control(Go2Cfg.control):
-        stiffness = {"hip": 20.0, "thigh": 20.0, "calf": 20.0}
-        damping = {"hip": 0.5, "thigh": 0.5, "calf": 0.5}
+        stiffness = {"hip": 40.0, "thigh": 40.0, "calf": 40.0}
+        damping = {"hip": 1.0, "thigh": 1.0, "calf": 1.0}
         ctrl_frequency = 100
         desired_sim_frequency = 100
-        gait_freq = [1.0, 3.0]  # oscillator frequency range [Hz]
+        gait_freq = [1.5, 1.5]  # oscillator frequency range [Hz]
         # Cycle offsets define a trot: front-left/rear-right move together,
         # half a cycle away from front-right/rear-left.
         gait_phase_offsets = {
@@ -55,17 +56,24 @@ class Go2TrotCfg(Go2Cfg):
         # The thigh/calf amplitudes approximately preserve fore-aft foot
         # position while alternately extending the stance diagonal and
         # shortening the swing diagonal.
-        gait_joint_offsets = 4 * [0.0, 0.96, -1.36]
-        gait_joint_amplitudes = 4 * [0.0, -0.15, 0.30]
+        
+        gait_joint_offsets = [0.0, -0.16, -0.14,   # FL -> thigh 0.80, calf -1.50
+                      0.0, -0.16, -0.14,   # FR
+                      0.0,  0.04, -0.14,   # RL -> thigh 1.00, calf -1.50
+                      0.0,  0.04, -0.14]   # RR
+        gait_joint_amplitudes = 4 * [0.0, -0.10, 0.20]
 
     class commands(Go2Cfg.commands):
-        var = 1.0
+        var = 0.1
+        num_commands = 4
 
         class ranges(Go2Cfg.commands.ranges):
-            lin_vel_x = [-1.0, 0.0, 1.0, 3.0]
+            lin_vel_x = [0.0, 0.5]
+            base_height = [0.30, 0.30]
+
 
     class push_robots(Go2Cfg.push_robots):
-        toggle = True
+        toggle = False
         interval_s = 5
 
     class domain_randomization(Go2Cfg.domain_randomization):
@@ -83,8 +91,8 @@ class Go2TrotCfg(Go2Cfg):
         # Use the SDK's OBJ visuals; keep our URDF's complete physical model.
         vsim_visual_mesh_dir = "{GYM_ROOT_DIR}/thirdparty/vlearn/assets/go2/assets"
         foot_name = "foot"
-        penalize_contacts_on = ["calf"]
-        terminate_after_contacts_on = ["base"]
+        penalize_contacts_on = ["calf", "hip"]
+        terminate_after_contacts_on = ["base", "Head"]
         end_effector_names = ["foot"]
         fix_base_link = False
         disable_gravity = False
@@ -97,6 +105,10 @@ class Go2TrotCfg(Go2Cfg):
         # Canonical RobotLayout order is FL, FR, RL, RR, with
         # hip, thigh, calf inside each leg. Backends map native order to it.
         base_height = 0.3
+
+        # Four commands: forward, sideways, yaw, target height
+        commands = [3.0, 1.0, 3.0, 0.3]
+
         dof_pos = 4 * [1.0472, 2.53075, 0.94247]
         dof_pos_obs = dof_pos
         dof_pos_target = [0.5 * x for x in dof_pos]
@@ -109,9 +121,12 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
         # * can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         activation = "elu"
         obs = [
+            "base_height",
             "base_ang_vel",
             "projected_gravity",
             "commands",
+            "phase_obs",
+            "phase_frequency",
             "dof_pos_obs",
             "dof_vel",
             "dof_pos_target",
@@ -142,6 +157,8 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
             "base_ang_vel",
             "projected_gravity",
             "commands",
+            "phase_obs",
+            "phase_frequency",
             "dof_pos_obs",
             "dof_vel",
             "dof_pos_target",
@@ -155,13 +172,15 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
                 lin_vel_z = 0.0
                 ang_vel_xy = 0.01
                 orientation = 1.0
+                collision = 0.1
                 torques = 5.0e-6
                 dof_vel = 0.0
                 stand_still = 0.0
                 dof_pos_limits = 0.0
                 feet_contact_forces = 0.0
                 dof_near_home = 0.0
-                min_base_height = 0.5
+                min_base_height = 0.0
+                tracking_base_height = 2.0
                 action_rate = 0.25
                 action_rate2 = 0.025
                 trot_support = 0.625
@@ -193,4 +212,4 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
 
     class runner(Go2RunnerCfg.runner):
         experiment_name = "go2trot"
-        max_iterations = 550
+        max_iterations = 50

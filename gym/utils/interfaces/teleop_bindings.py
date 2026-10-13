@@ -24,7 +24,7 @@ natural U/O pair collides with vsim's step toggle:
      N M             N / M   yaw left / right
                      R       reset envs
                      Esc     quit (or close the window)
-                     Up/Down up / down (command effects: student TODO)
+                     Up/Down up / down (command effects: increase / decrease target base height)
 
 GLFW (MuJoCo) uses ASCII codes for letter keys, so `ord(letter)` is the
 keycode. Each viewer adapter translates named special keys such as UP/DOWN
@@ -79,8 +79,14 @@ class TeleopCommands:
         self.max_vel_yaw = 2.0
         self.increment_yaw = self.max_vel_yaw * 0.2
 
+        self.min_height = env.command_ranges["base_height"][0]
+        self.max_height = env.command_ranges["base_height"][1]
+        self.increment_height = (self.max_height - self.min_height) / 5
+
+
         env.commands[:] = 0.0
-        env.commands[:, 0] = 1.0  # seed forward velocity so motion is visible
+        env.commands[:, 3] = self.max_height
+        env.commands[:, 0] = 0.0  # seed forward velocity so motion is visible
         if hasattr(env.cfg, "commands"):
             env.cfg.commands.resampling_time = env.max_episode_length_s + 1
 
@@ -101,6 +107,30 @@ class TeleopCommands:
             c[:, 2] = torch.clamp(c[:, 2] + self.increment_yaw, max=self.max_vel_yaw)
         elif action == "yaw_right":
             c[:, 2] = torch.clamp(c[:, 2] - self.increment_yaw, min=-self.max_vel_yaw)
+
+        elif action == "up":
+            c[:, 3] = torch.clamp(
+                c[:, 3] + self.increment_height,
+                max=self.max_height
+            )
+            print(
+                f"Target: {c[0, 3].item():.3f} m | "
+                f"Actual: {self.env.base_height[0, 0].item():.3f} m",
+                flush=True,
+            )
+            
+        elif action == "down":
+            c[:, 3] = torch.clamp(
+                c[:, 3] - self.increment_height,
+                min=self.min_height
+            )
+            print(
+                f"Target: {c[0, 3].item():.3f} m | "
+                f"Actual: {self.env.base_height[0, 0].item():.3f} m",
+                flush=True,
+)
+
+
         elif action == "reset":
             self.env.timed_out[:] = True
             self.env.reset()
