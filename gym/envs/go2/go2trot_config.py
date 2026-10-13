@@ -22,13 +22,13 @@ class Go2TrotCfg(Go2Cfg):
         root_pos_range = [
             [0.0, 0.0],  # x
             [0.0, 0.0],  # y
-            [0.450, 0.50],  # z
+            [0.32, 0.36],  # z
             [0.0, 0.0],  # roll
             [0.0, 0.0],  # pitch
             [0.0, 0.0],  # yaw
         ]
         root_vel_range = [
-            [-0.5, 3.0],  # x
+            [-0.1, 0.5],  # x
             [-0.1, 0.1],  # y
             [-0.05, 0.05],  # z
             [0.0, 0.0],  # roll
@@ -64,12 +64,14 @@ class Go2TrotCfg(Go2Cfg):
         gait_joint_amplitudes = 4 * [0.0, -0.10, 0.20]
 
     class commands(Go2Cfg.commands):
-        var = 0.1
+        var = 0.0
         num_commands = 4
 
         class ranges(Go2Cfg.commands.ranges):
-            lin_vel_x = [0.0, 0.5]
-            base_height = [0.30, 0.30]
+            lin_vel_x = [0.0, 0.0, 0.0, 0.0]
+            lin_vel_y = 0.0
+            yaw_vel = 0.0
+            base_height = [0.22, 0.34]
 
 
     class push_robots(Go2Cfg.push_robots):
@@ -180,7 +182,7 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
                 feet_contact_forces = 0.0
                 dof_near_home = 0.0
                 min_base_height = 0.0
-                tracking_base_height = 2.0
+                tracking_base_height = 4.0
                 action_rate = 0.25
                 action_rate2 = 0.025
                 trot_support = 0.625

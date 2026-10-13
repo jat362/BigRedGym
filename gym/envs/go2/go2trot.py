@@ -188,6 +188,10 @@ class Go2Trot(LeggedRobot):
         )
         return load.square() * (3.0 - 2.0 * load)
 
+    def _gait_active(self):
+        speed = torch.linalg.norm(self.commands[:, :3], dim=1)
+        return torch.clamp(speed / 0.3, 0.0, 1.0)
+
     def _reward_trot_support(self):
         """Reward diagonal stance support when the robot is commanded to move."""
         phase = torch.sin(self._leg_phases())
@@ -205,13 +209,12 @@ class Go2Trot(LeggedRobot):
         )
 
         reward = torch.relu(phase).amax(dim=1) * paired_support
+        stand = contact_strength.mean(dim=1)  # all four feet loaded
 
-        # Match the gait scaling used in _update_gait_reference()
         speed = torch.linalg.norm(self.commands[:, :3], dim=1)
         gait_scale = torch.clamp(speed / 0.3, min=0.0, max=1.0)
 
-        return gait_scale * reward
-
+        return gait_scale * reward + (1.0 - gait_scale) * stand
 
     def _reward_swing_contact(self):
         """Penalize swing-foot contact only when the robot is commanded to move."""
@@ -259,7 +262,7 @@ class Go2Trot(LeggedRobot):
         error = (actual_height - target_height)
 
         return torch.exp(
-        -torch.square(error / 0.1)
+        -torch.square(error / 0.15)
     )
 
     def _reward_tracking_lin_vel(self):
