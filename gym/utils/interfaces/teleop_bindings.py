@@ -69,14 +69,14 @@ class TeleopCommands:
     def __init__(self, env):
         self.env = env
 
-        self.max_vel_forward = 4.0
-        self.max_vel_backward = -1.0
+        self.max_vel_forward = 1.0
+        self.max_vel_backward = -0.5
         self.increment_x = (self.max_vel_forward - self.max_vel_backward) * 0.1
 
-        self.max_vel_sideways = 1.0
+        self.max_vel_sideways = 0.3
         self.increment_y = self.max_vel_sideways * 0.2
 
-        self.max_vel_yaw = 2.0
+        self.max_vel_yaw = 0.5
         self.increment_yaw = self.max_vel_yaw * 0.2
 
         self.min_height = env.command_ranges["base_height"][0]

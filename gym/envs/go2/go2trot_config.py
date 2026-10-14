@@ -41,7 +41,7 @@ class Go2TrotCfg(Go2Cfg):
         damping = {"hip": 1.0, "thigh": 1.0, "calf": 1.0}
         ctrl_frequency = 100
         desired_sim_frequency = 100
-        gait_freq = [1.5, 1.5]  # oscillator frequency range [Hz]
+        gait_freq = [1.5, 2.5]  # oscillator frequency range [Hz]
         # Cycle offsets define a trot: front-left/rear-right move together,
         # half a cycle away from front-right/rear-left.
         gait_phase_offsets = {
@@ -68,8 +68,10 @@ class Go2TrotCfg(Go2Cfg):
         num_commands = 4
 
         class ranges(Go2Cfg.commands.ranges):
-            lin_vel_x = [0.0, 0.5]
-            base_height = [0.30, 0.30]
+            lin_vel_x = [-0.5, 0.0, 0.5, 1.0]
+            lin_vel_y = 0.3            # scalar in the base class, as before
+            yaw_vel = 0.5
+            base_height = [0.24, 0.34] # narrower while walking; widen later
 
 
     class push_robots(Go2Cfg.push_robots):

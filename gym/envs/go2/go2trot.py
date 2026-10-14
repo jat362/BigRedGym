@@ -135,6 +135,11 @@ class Go2Trot(LeggedRobot):
         forward = forward_commands[command_indices] + (
             torch.randn(self.num_envs, device=self.device) * self.cfg.commands.var
         )
+
+        lo, hi = min(forward_commands.tolist()), max(forward_commands.tolist())
+        forward = forward.clamp(lo, hi)
+
+
         masked_update(self.commands[:, 0], forward, command_mask)
 
         if 0 in self.cfg.commands.ranges.lin_vel_x:
