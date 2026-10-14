@@ -204,10 +204,19 @@ def play(env, runner, stand_test=False):
             plt.plot(t_log, actual_log, label="actual height")
             plt.xlabel("time (s)")
             plt.ylabel("base height (m)")
+            plt.title("Time-Series Plot")
             plt.legend()
             plt.tight_layout()
             plt.savefig("height_tracking.pdf")
             print("saved height_tracking.pdf")
+                        
+            plt.savefig("height_tracking.png", dpi=200)
+            import csv
+            with open("height_tracking.csv", "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["t_s", "target_m", "actual_m"])
+                w.writerows(zip(t_log, target_log, actual_log))
+            print("saved height_tracking.png and height_tracking.csv")
 
 
 if __name__ == "__main__":

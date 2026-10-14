@@ -102,3 +102,10 @@ pendulum_rollout.png
 notebooks/__marimo__/
 
 height_tracking.pdf
+
+height_tracking.*
+report.pdf
+train_stage2.log
+train_*.log
+play_output.txt
+metrics.txt
