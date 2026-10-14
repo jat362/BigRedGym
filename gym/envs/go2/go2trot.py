@@ -1,4 +1,5 @@
 import torch
+import math
 
 from gym.utils.sampling import torch_rand_float
 from gym.utils.sampling import masked_update
@@ -57,16 +58,23 @@ class Go2Trot(LeggedRobot):
 
     def _update_gait_reference(self):
         joint_phase = self.phase + self._gait_dof_phase_offsets.unsqueeze(0)
-
         speed = torch.linalg.norm(self.commands[:, :3], dim=1, keepdim=True)
-
         gait_scale = torch.clamp(speed / 0.3, min=0.0, max=1.0)
+
+        # Height-dependent posture: idealized two-link leg, relative to 0.30 m.
+        L, r = 0.213, 0.022
+        h = self.commands[:, 3].clamp(0.20, 0.36)
+        theta = torch.acos(((h - r) / (2 * L)).clamp(max=0.98))
+        theta0 = math.acos((0.30 - r) / (2 * L))
+        d = (theta - theta0).unsqueeze(1)           # (num_envs, 1)
+        height_offset = torch.zeros_like(self.gait_reference)
+        height_offset[:, 1::3] = d                  # thigh
+        height_offset[:, 2::3] = -2.0 * d           # calf
 
         self.gait_reference[:] = (
             self._gait_joint_offsets
-            + gait_scale
-            * self._gait_joint_amplitudes
-            * torch.sin(joint_phase)
+            + height_offset
+            + gait_scale * self._gait_joint_amplitudes * torch.sin(joint_phase)
         )
 
     def _leg_phases(self):
@@ -256,14 +264,10 @@ class Go2Trot(LeggedRobot):
 
     def _reward_tracking_base_height(self):
         """Reward tracking the commanded base height."""
-        target_height = self.commands[:, 3]
-        actual_height = self.base_height[:, 0]
 
-        error = (actual_height - target_height)
-
-        return torch.exp(
-        -torch.square(error / 0.15)
-    )
+        error = self.base_height[:, 0] - self.commands[:, 3]
+        return 0.5 * torch.exp(-torch.square(error / 0.10)) \
+             + 0.5 * torch.exp(-torch.square(error / 0.03))
 
     def _reward_tracking_lin_vel(self):
         """Tracking of linear velocity commands (xy axes)"""

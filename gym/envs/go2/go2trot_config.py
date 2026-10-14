@@ -214,4 +214,4 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
 
     class runner(Go2RunnerCfg.runner):
         experiment_name = "go2trot"
-        max_iterations = 50
+        max_iterations = 300
